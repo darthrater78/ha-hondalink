@@ -32,7 +32,7 @@ This is early custom-component work built from a validated HondaLink Android app
 
 ### HACS
 
-This repository is prepared for HACS custom repository installation, but do not publish it yet unless you are ready to support external users.
+This repository is ready for HACS custom repository installation.
 
 1. In Home Assistant, open HACS.
 2. Go to Integrations.
@@ -148,4 +148,4 @@ Useful validation commands:
 python -m py_compile .\api.py .\config_flow.py
 ```
 
-HACS and hassfest workflow files are included under `.github/workflows/`, but nothing is published or released from this local workspace.
+HACS and hassfest workflow files are included under `.github/workflows/`.
