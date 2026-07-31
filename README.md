@@ -126,6 +126,8 @@ Enter the VIN manually in the setup form. The integration will still try to fetc
 ## Security
 
 - This integration stores your HondaLink email, password, and remote PIN in the Home Assistant config entry so it can re-authenticate after token expiry.
+- The Honda app `CLIENT_ID` and `CLIENT_SECRET` values are app-level credentials observed from the HondaLink mobile app flow, not user-specific credentials. Honda ships and uses them as part of the mobile app authentication flow, which this integration mirrors.
+- Honda may rotate or revoke those app-level credentials at any time. If that happens, authentication can stop working for all users until the integration is updated.
 - Do not share logs or diagnostics that include tokens, remote PIN, VIN, or GPS coordinates.
 - Remote commands can physically affect your vehicle. Use this only with your own HondaLink account and vehicle.
 
