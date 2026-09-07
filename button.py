@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DATA_COORDINATOR, DOMAIN
+from .const import DATA_COORDINATOR, DATA_RECALL_COORDINATOR, DOMAIN
 from .coordinator import HondaLinkDataUpdateCoordinator
 from .entity import HondaLinkEntity
 
@@ -59,8 +59,13 @@ BUTTONS: tuple[HondaLinkButtonDescription, ...] = (
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    coordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
-    async_add_entities(HondaLinkButton(coordinator, entry, description) for description in BUTTONS)
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data[DATA_COORDINATOR]
+    entities: list[HondaLinkEntity] = [
+        HondaLinkButton(coordinator, entry, description) for description in BUTTONS
+    ]
+    entities.append(HondaLinkRecallCheckButton(data[DATA_RECALL_COORDINATOR], entry))
+    async_add_entities(entities)
 
 
 class HondaLinkButton(HondaLinkEntity, ButtonEntity):
@@ -72,3 +77,14 @@ class HondaLinkButton(HondaLinkEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.entity_description.press_fn(self.coordinator)
+
+
+class HondaLinkRecallCheckButton(HondaLinkEntity, ButtonEntity):
+    _attr_icon = "mdi:car-wrench"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator, entry, "check_recalls")
+        self._attr_translation_key = "check_recalls"
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_refresh()

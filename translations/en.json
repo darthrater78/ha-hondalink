@@ -85,7 +85,8 @@
       "horn": {"name": "Horn"},
       "lights": {"name": "Lights"},
       "stop_horn_lights": {"name": "Stop horn/lights"},
-      "refresh": {"name": "Refresh"}
+      "refresh": {"name": "Refresh"},
+      "check_recalls": {"name": "Check recalls"}
     },
     "lock": {
       "doors": {"name": "Doors"}

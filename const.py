@@ -61,6 +61,7 @@ UPDATE_INTERVAL = timedelta(minutes=DEFAULT_SCAN_INTERVAL)
 # separate free public service, so this polls far less often than the
 # vehicle telematics coordinator.
 RECALL_UPDATE_INTERVAL = timedelta(hours=12)
+RECALL_RETRY_INTERVAL = timedelta(minutes=15)
 
 DATA_API = "api"
 DATA_COORDINATOR = "coordinator"

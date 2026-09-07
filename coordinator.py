@@ -18,7 +18,7 @@ from .api import (
     HondaLinkCommandResult,
     HondaLinkError,
 )
-from .const import CONF_SCAN_INTERVAL, CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN, RECALL_UPDATE_INTERVAL
+from .const import CONF_SCAN_INTERVAL, CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN, RECALL_RETRY_INTERVAL, RECALL_UPDATE_INTERVAL
 from .nhtsa import NHTSAError, async_decode_vin, async_get_recalls
 
 _LOGGER = logging.getLogger(__name__)
@@ -134,6 +134,9 @@ class HondaLinkRecallCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
         try:
             if self._vehicle is None:
                 self._vehicle = await async_decode_vin(self.session, self.vin)
-            return await async_get_recalls(self.session, **self._vehicle)
+            result = await async_get_recalls(self.session, **self._vehicle)
         except NHTSAError as err:
+            self.update_interval = RECALL_RETRY_INTERVAL
             raise UpdateFailed(str(err)) from err
+        self.update_interval = RECALL_UPDATE_INTERVAL
+        return result
