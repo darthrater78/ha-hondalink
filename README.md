@@ -130,6 +130,20 @@ payload structure to the 12V battery sensor's attributes, which is useful when
 mapping a new vehicle but writes hundreds of values to the recorder database on
 every poll. Turn it back off once mapping is done.
 
+## Example Dashboard
+
+A ready-to-use [Mushroom](https://github.com/piitaya/lovelace-mushroom) view is
+included at [`dashboards/hondalink-mushroom.yaml`](dashboards/hondalink-mushroom.yaml).
+It shows fuel, range, odometer, oil life, 12V battery status, and cabin
+temperature at a glance; door/window/light/warning status; tire pressures;
+lock/unlock control; the remote action buttons; and a map from the GPS device
+tracker.
+
+It needs the Mushroom custom card (install via HACS > Frontend > Mushroom) and
+otherwise only uses Home Assistant's built-in grid and map cards. See the
+comments at the top of the file for how to point it at your vehicle's
+entities and add it to a dashboard.
+
 ## Troubleshooting
 
 ### Could not connect to HondaLink
