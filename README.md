@@ -23,7 +23,7 @@ This integration uses the HondaLink Android app API flow, observed while debuggi
 - Fuel level, range, odometer, oil life, 12V battery status, tire pressure, cabin temperature, vehicle speed, and last update sensors
 - Door, hood, trunk, window, lights, warning lamp, and remote engine binary sensors
 - Lock and unlock entity for supported vehicles
-- Buttons for engine start, engine stop, horn, lights, stop horn/lights, and refresh
+- Buttons for engine start, engine stop, horn, lights, stop horn/lights, refresh, and check recalls
 - Device tracker from vehicle GPS data when returned by the HondaLink API
 - Active recall binary sensor, sourced from NHTSA's public recalls database and carrying full recall details (campaign number, component, summary, consequence, remedy, report date) as attributes
 - Configurable lock and unlock command codes for vehicles or markets that use alternate CIG command names
@@ -227,6 +227,14 @@ If this integration is useful to you, consider supporting
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Version History
+
+### 0.1.11 - 2026-09-07
+
+- Added a "Check recalls" button so users can trigger an immediate NHTSA recall
+  lookup without waiting for the 12-hour polling cycle or reloading the
+  integration.
+- The recall coordinator now retries in 15 minutes after a failed NHTSA fetch
+  (e.g. a DNS timeout) instead of waiting the full 12-hour interval.
 
 ### 0.1.10 - 2026-09-07
 
