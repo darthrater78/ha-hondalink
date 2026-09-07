@@ -160,6 +160,21 @@ has nothing cached to report. Common causes, in order of likelihood:
 3. Nothing has asked the vehicle to report yet. Press the refresh button, or run
    the probe with `--refresh`.
 
+### Home Assistant asks you to reauthenticate
+
+If HondaLink stops accepting the stored credentials, the integration raises a
+reauthentication prompt rather than retrying on every poll. Retrying a rejected
+password repeatedly risks locking the HondaLink account, so the integration stops
+and waits for you.
+
+Home Assistant shows the entry as needing attention, with a **Reconfigure** or
+**Reauthenticate** action. Enter the current password, and the remote PIN if that
+also changed. Leaving the PIN field blank keeps the stored one.
+
+This normally means the password was changed in the HondaLink app or on the Honda
+website. If the same credentials do work in the app, check that the account does
+not need updated terms accepted or verification completed there first.
+
 ### Diagnosing connection problems
 
 `tools/hondalink_probe.py` runs the same four-step flow the integration uses and
@@ -192,6 +207,11 @@ If this integration is useful to you, consider supporting
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Version History
+
+### 0.1.8 - 2026-09-07
+
+- Documented the reauthentication prompt. The flow was added in 0.1.5 but was
+  described only in the changelog, so the prompt appeared without explanation.
 
 ### 0.1.7 - 2026-09-07
 
