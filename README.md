@@ -3,17 +3,20 @@
 </p>
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
-[![Version](https://img.shields.io/github/v/release/daviddelahoz/ha-hondalink)](https://github.com/daviddelahoz/ha-hondalink/releases)
-[![License](https://img.shields.io/github/license/daviddelahoz/ha-hondalink)](LICENSE)
-[![Maintenance](https://img.shields.io/maintenance/yes/2026.svg)](https://github.com/daviddelahoz/ha-hondalink)
+[![Version](https://img.shields.io/github/v/release/darthrater78/ha-hondalink)](https://github.com/darthrater78/ha-hondalink/releases)
+[![License](https://img.shields.io/github/license/darthrater78/ha-hondalink)](LICENSE)
+[![Maintenance](https://img.shields.io/maintenance/yes/2026.svg)](https://github.com/darthrater78/ha-hondalink)
 
 # HondaLink for Home Assistant
 
-Unofficial Home Assistant custom integration for HondaLink MY21 telematics vehicles.
+Unofficial Home Assistant custom integration for HondaLink telematics vehicles.
 
 This integration uses the HondaLink Android app API flow, observed while debugging the app, to discover vehicles, poll vehicle state, and expose supported remote commands in Home Assistant.
 
 > This project is not affiliated with, endorsed by, or supported by Honda. HondaLink is a trademark of its respective owner.
+
+> This is a fork of [daviddelahoz/ha-hondalink](https://github.com/daviddelahoz/ha-hondalink),
+> which did the original HondaLink API research this integration is built on.
 
 ## Features
 
@@ -26,7 +29,19 @@ This integration uses the HondaLink Android app API flow, observed while debuggi
 
 ## Status
 
-This is early custom-component work built from a validated HondaLink Android app flow observed during app debugging. It has been tested against a MY21 HondaLink telematics flow, but Honda can change these private endpoints at any time.
+This is early custom-component work built from a validated HondaLink Android app
+flow observed during app debugging. Honda can change these private endpoints at
+any time.
+
+Known platform coverage, by the `TelematicsPlatform` field the vehicle API returns:
+
+| Platform | Example | Status |
+|---|---|---|
+| MY21 | 10th gen Accord | Confirmed working, including live data |
+| MY23 | 2024 Accord Hybrid | Endpoints confirmed: authentication, vehicle discovery, and the dashboard schema all respond, with every sensor path this integration maps present. Live values not yet verified end to end. |
+| BEV3 | Prologue | Not supported. These vehicles use HondaLink Connected by OnStar, a different backend entirely. |
+
+Run `tools/hondalink_probe.py` to find out which platform your vehicle reports.
 
 ## Installation
 
@@ -121,7 +136,35 @@ Confirm that the same email, password, and remote PIN work in the HondaLink mobi
 
 ### No vehicle discovered
 
-Enter the VIN manually in the setup form. The integration will still try to fetch vehicle details by VIN after login.
+Enter the VIN manually in the setup form. The integration will still try to fetch
+vehicle details by VIN after login.
+
+### Sensors exist but every value is unknown
+
+The dashboard endpoint returns its full schema with empty values when the vehicle
+has nothing cached to report. Common causes, in order of likelihood:
+
+1. Data or connected services are switched off in the vehicle itself.
+2. The vehicle is not enrolled in connected services. Check for `"Enrollment": "N"`
+   in the probe's step 3 output.
+3. Nothing has asked the vehicle to report yet. Press the refresh button, or run
+   the probe with `--refresh`.
+
+### Diagnosing connection problems
+
+`tools/hondalink_probe.py` runs the same four-step flow the integration uses and
+stops at the first failure, so the step that breaks identifies the layer at fault.
+It needs no Home Assistant install and no third-party packages.
+
+```bash
+python3 tools/hondalink_probe.py
+python3 tools/hondalink_probe.py --refresh   # also ask the vehicle to report now
+```
+
+Credentials are read interactively or from `HONDALINK_EMAIL` and
+`HONDALINK_PASSWORD`, never from the command line, and are not written to disk.
+Tokens are redacted in its output, but the schema dump can contain your VIN and
+GPS coordinates, so scrub it before sharing.
 
 ## Security
 
@@ -133,11 +176,35 @@ Enter the VIN manually in the setup form. The integration will still try to fetc
 
 ## Support
 
+If this integration is useful to you, consider supporting
+[daviddelahoz](https://github.com/daviddelahoz), who reverse-engineered the original API flow:
+
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
+## Version History
+
+### 0.1.4 - 2026-09-07
+
+- Fixed options flow failing to open on Home Assistant 2024.11 and newer.
+  `OptionsFlow.config_entry` became a read-only property provided by the base
+  class, so the handler no longer accepts or assigns it.
+- Raised the minimum supported Home Assistant version to 2024.11.0, which is
+  where that property was introduced.
+- Repointed repository metadata (codeowners, documentation, issue tracker,
+  README badges) at this fork.
+- Added `tools/hondalink_probe.py`, a dependency-free diagnostic that walks the
+  HIDAS authentication and CIG dashboard flow and reports which layer fails for
+  a given vehicle. Confirmed the API serves MY23-platform vehicles
+  (2024 Accord Hybrid) with all mapped sensor paths present.
+
+### 0.1.3
+
+- Documented the HondaLink app-level credentials and their rotation risk.
 
 ## Known Limitations
 
-- Tested against a MY21 telematics HondaLink flow.
+- See the Status section for per-platform coverage. MY23 vehicles reach the API
+  and match the expected schema, but end-to-end live data is unverified.
 - EV fields are exposed only when the Honda dashboard payload returns actual values.
 - Lock and unlock command behavior may vary by vehicle, subscription, market, or Honda API changes.
 - HondaLink is a private cloud API; reliability depends on Honda's service and endpoint compatibility.
@@ -146,8 +213,8 @@ Enter the VIN manually in the setup form. The integration will still try to fetc
 
 Useful validation commands:
 
-```powershell
-python -m py_compile .\api.py .\config_flow.py
+```bash
+python3 -m py_compile *.py tools/*.py
 ```
 
 HACS and hassfest workflow files are included under `.github/workflows/`.

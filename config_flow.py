@@ -215,12 +215,12 @@ class HondaLinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
-        return HondaLinkOptionsFlowHandler(config_entry)
+        return HondaLinkOptionsFlowHandler()
 
 
 class HondaLinkOptionsFlowHandler(config_entries.OptionsFlow):
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+    # config_entry is provided by the base class; assigning it here raises
+    # on Home Assistant 2024.11+, where it became a read-only property.
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
