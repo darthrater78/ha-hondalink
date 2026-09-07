@@ -6,10 +6,10 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import HondaLinkAPI, HondaLinkCommandError, HondaLinkError
+from .api import HondaLinkAPI, HondaLinkAuthError, HondaLinkCommandError, HondaLinkError
 from .const import CONF_SCAN_INTERVAL, CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +30,10 @@ class HondaLinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             return await self.api.async_get_dashboard_latest(self.vin)
+        except HondaLinkAuthError as err:
+            # Must precede HondaLinkError: bad credentials are permanent until the
+            # user re-enters them, so retrying on a poll loop only risks lockout.
+            raise ConfigEntryAuthFailed(str(err)) from err
         except HondaLinkError as err:
             raise UpdateFailed(str(err)) from err
 

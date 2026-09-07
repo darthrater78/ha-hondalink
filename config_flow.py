@@ -16,6 +16,7 @@ from .const import (
     CONF_CLIENT_REG_KEY,
     CONF_COUNTRY,
     CONF_DEVICE_ID,
+    CONF_DIAGNOSTIC_ATTRIBUTES,
     CONF_EMAIL,
     CONF_EXPIRES_AT,
     CONF_HIDAS_IDENT,
@@ -30,6 +31,7 @@ from .const import (
     CONF_UNLOCK_COMMAND,
     CONF_VEHICLE_INFO,
     CONF_VIN,
+    DEFAULT_DIAGNOSTIC_ATTRIBUTES,
     DEFAULT_LOCK_COMMAND,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
@@ -170,6 +172,60 @@ class HondaLinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema({vol.Required(CONF_VIN): vol.In({vin: _vehicle_label(vehicle) for vin, vehicle in vehicles_by_vin.items()})})
         return self.async_show_form(step_id="vehicle", data_schema=schema, errors=errors)
 
+    async def async_step_reauth(self, entry_data: dict[str, Any]):
+        """Triggered when stored credentials stop working."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
+        entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            password = user_input[CONF_PASSWORD]
+            pin = user_input.get(CONF_PIN, "").strip() or entry.data.get(CONF_PIN, "")
+            api = HondaLinkAPI(
+                async_get_clientsession(self.hass),
+                email=entry.data[CONF_EMAIL],
+                password=password,
+                pin=pin,
+                vin=entry.data.get(CONF_VIN),
+                device_id=entry.data.get(CONF_DEVICE_ID),
+                session_id=entry.data.get(CONF_SESSION_ID),
+            )
+            try:
+                await api.async_login()
+            except HondaLinkAuthError as err:
+                _LOGGER.warning("HondaLink reauth failed: %s", err)
+                errors["base"] = "invalid_auth"
+            except HondaLinkError as err:
+                _LOGGER.warning("HondaLink reauth could not connect: %s", err)
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected HondaLink reauth error")
+                errors["base"] = "unknown"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_PASSWORD: password,
+                        CONF_PIN: pin,
+                        **api.export_auth_data(),
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PASSWORD): str,
+                    vol.Optional(CONF_PIN, default=""): str,
+                }
+            ),
+            description_placeholders={"email": entry.data.get(CONF_EMAIL, "")},
+            errors=errors,
+        )
+
     async def _async_create_vehicle_entry(
         self,
         api: HondaLinkAPI,
@@ -234,6 +290,10 @@ class HondaLinkOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(CONF_SCAN_INTERVAL, default=options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)): int,
                 vol.Required(CONF_LOCK_COMMAND, default=options.get(CONF_LOCK_COMMAND, DEFAULT_LOCK_COMMAND)): str,
                 vol.Required(CONF_UNLOCK_COMMAND, default=options.get(CONF_UNLOCK_COMMAND, DEFAULT_UNLOCK_COMMAND)): str,
+                vol.Required(
+                    CONF_DIAGNOSTIC_ATTRIBUTES,
+                    default=options.get(CONF_DIAGNOSTIC_ATTRIBUTES, DEFAULT_DIAGNOSTIC_ATTRIBUTES),
+                ): bool,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

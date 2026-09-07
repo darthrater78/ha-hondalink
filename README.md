@@ -26,6 +26,7 @@ This integration uses the HondaLink Android app API flow, observed while debuggi
 - Buttons for engine start, engine stop, horn, lights, stop horn/lights, and refresh
 - Device tracker from vehicle GPS data when returned by the HondaLink API
 - Configurable lock and unlock command codes for vehicles or markets that use alternate CIG command names
+- Units follow what the vehicle reports, so distance, pressure, and speed are not assumed
 
 ## Status
 
@@ -117,8 +118,14 @@ After setup, open the integration options to change:
 - Polling interval
 - Lock command code
 - Unlock command code
+- Diagnostic attributes
 
 The default lock command is `alk`; the default unlock command is `dulk`.
+
+Diagnostic attributes are off by default. Turning them on adds the full dashboard
+payload structure to the 12V battery sensor's attributes, which is useful when
+mapping a new vehicle but writes hundreds of values to the recorder database on
+every poll. Turn it back off once mapping is done.
 
 ## Troubleshooting
 
@@ -182,6 +189,28 @@ If this integration is useful to you, consider supporting
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Version History
+
+### 0.1.5 - 2026-09-07
+
+- Added a reauthentication flow. Credential failures previously surfaced as
+  ordinary update errors and retried on every poll, which risks account lockout;
+  Home Assistant now prompts for the password instead.
+- Diagnostic attributes on the 12V battery sensor are now off by default and
+  controlled by an option. They wrote several hundred values to the recorder
+  database on every poll.
+- Sensor units now follow the unit the vehicle reports, falling back to the
+  previous defaults. Odometer, range, speed, and tire pressures were hardcoded
+  and would have been silently wrong on a vehicle reporting metric units.
+- Fuel level is no longer reported as a battery device class.
+- Fixed several sensors reporting confident wrong states for a vehicle that has
+  not reported yet. Honda fills unreported fields with the string `unknown`,
+  which was being read as a real value: doors and windows showed as open, lights
+  as on, the door lock as unlocked, and the warning lamp as all-clear. These now
+  report unknown until the vehicle actually reports.
+- Concurrent requests arriving on an expired token now produce a single login.
+- Response bodies that are not valid JSON are truncated in error messages, since
+  redaction cannot inspect them.
+- Minimum Home Assistant version is now 2024.12.0.
 
 ### 0.1.4 - 2026-09-07
 

@@ -12,6 +12,14 @@
           "name": "Name"
         }
       },
+      "reauth_confirm": {
+        "title": "Reauthenticate HondaLink",
+        "description": "HondaLink rejected the stored credentials for {email}. Enter the current password, and the remote PIN if it changed.",
+        "data": {
+          "password": "Password",
+          "pin": "Remote PIN"
+        }
+      },
       "vehicle": {
         "title": "Select vehicle",
         "description": "Choose the Honda vehicle to add.",
@@ -27,7 +35,8 @@
       "vin_required": "No vehicle was discovered. Enter the VIN manually."
     },
     "abort": {
-      "already_configured": "This vehicle is already configured."
+      "already_configured": "This vehicle is already configured.",
+      "reauth_successful": "HondaLink credentials updated."
     }
   },
   "options": {
@@ -38,7 +47,8 @@
           "pin": "Remote PIN",
           "scan_interval": "Polling interval in minutes",
           "lock_command": "Lock command code",
-          "unlock_command": "Unlock command code"
+          "unlock_command": "Unlock command code",
+          "diagnostic_attributes": "Expose diagnostic attributes (increases database usage)"
         }
       }
     }

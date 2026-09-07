@@ -135,6 +135,7 @@ class HondaLinkAPI:
         self.session_id = session_id or str(uuid.uuid4())
         self.lock_command = lock_command or DEFAULT_LOCK_COMMAND
         self.unlock_command = unlock_command or DEFAULT_UNLOCK_COMMAND
+        self._login_lock = asyncio.Lock()
 
     async def async_register_client(self) -> str:
         data = await self._request_identity(
@@ -180,10 +181,18 @@ class HondaLinkAPI:
         self.language = user.get("language_code") or self.language or DEFAULT_LANGUAGE
         self.hidas_ident = user.get("hidas_ident") or self.hidas_ident
 
+    def _token_is_valid(self) -> bool:
+        return bool(self.access_token) and self.expires_at > time.time() and bool(self.hidas_ident)
+
     async def async_ensure_login(self) -> None:
-        if self.access_token and self.expires_at > time.time() and self.hidas_ident:
+        if self._token_is_valid():
             return
-        await self.async_login()
+        # Serialised so a coordinator poll and a command arriving together on an
+        # expired token produce one login rather than two.
+        async with self._login_lock:
+            if self._token_is_valid():
+                return
+            await self.async_login()
 
     def export_auth_data(self) -> dict[str, Any]:
         return {
@@ -450,7 +459,13 @@ class HondaLinkAPI:
             try:
                 payload = json.loads(text) if text else {}
             except json.JSONDecodeError as err:
-                raise HondaLinkError(f"Invalid JSON from HondaLink: {response.status} {text}") from err
+                # Not parseable, so _redact_payload cannot inspect it. An error page
+                # may embed a token, so only a short excerpt is surfaced.
+                excerpt = text[:200].replace("\n", " ")
+                suffix = "..." if len(text) > 200 else ""
+                raise HondaLinkError(
+                    f"Invalid JSON from HondaLink (HTTP {response.status}): {excerpt}{suffix}"
+                ) from err
 
             if response.status in (401, 403):
                 raise HondaLinkAuthError(f"HondaLink authorization failed: {_redact_payload(payload)}")

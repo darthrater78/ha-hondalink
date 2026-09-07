@@ -18,6 +18,31 @@ class HondaLinkBinarySensorDescription(BinarySensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], bool | None]
 
 
+def _warning_lamp_on(body: dict[str, Any]) -> bool | None:
+    """None when the vehicle reports no lamp data at all.
+
+    Returning False there would show a green all-clear built on nothing.
+    """
+    messages = [
+        message
+        for group in get_path(body, "warningLamps.data", []) or []
+        if isinstance(group, dict)
+        for message in group.get("messages", []) or []
+        if isinstance(message, dict)
+    ]
+    if not messages:
+        return None
+    return any(str(message.get("condition", "")).upper() == "ON" for message in messages)
+
+
+def _remote_engine_running(body: dict[str, Any]) -> bool | None:
+    """None while the vehicle has not reported a remote start state."""
+    status = get_path(body, "remoteEngineStart.vehicleStartEvent.resStatus")
+    if status in (None, "", "unknown"):
+        return None
+    return str(status).upper() == "ON"
+
+
 DOOR_KEYS = ["firstRowDriver", "firstRowPassenger", "secondRowDriver", "secondRowPassenger"]
 WINDOW_KEYS = ["frontWindowDR", "frontWindowAS", "rearWindowRR", "rearWindowRL"]
 
@@ -57,18 +82,12 @@ BINARY_SENSORS: tuple[HondaLinkBinarySensorDescription, ...] = (
         key="warning_lamp_on",
         translation_key="warning_lamp_on",
         device_class=BinarySensorDeviceClass.PROBLEM,
-        value_fn=lambda body: any(
-            str(message.get("condition", "")).upper() == "ON"
-            for group in get_path(body, "warningLamps.data", []) or []
-            if isinstance(group, dict)
-            for message in group.get("messages", [])
-            if isinstance(message, dict)
-        ),
+        value_fn=_warning_lamp_on,
     ),
     HondaLinkBinarySensorDescription(
         key="remote_engine_running",
         translation_key="remote_engine_running",
-        value_fn=lambda body: str(get_path(body, "remoteEngineStart.vehicleStartEvent.resStatus", "")).upper() == "ON",
+        value_fn=_remote_engine_running,
     ),
 )
 

@@ -7,9 +7,10 @@ import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
-from .api import HondaLinkAPI
+from .api import HondaLinkAPI, HondaLinkAuthError
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CLIENT_REG_KEY,
@@ -76,7 +77,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         lock_command=entry.options.get(CONF_LOCK_COMMAND, DEFAULT_LOCK_COMMAND),
         unlock_command=entry.options.get(CONF_UNLOCK_COMMAND, DEFAULT_UNLOCK_COMMAND),
     )
-    await api.async_ensure_login()
+    try:
+        await api.async_ensure_login()
+    except HondaLinkAuthError as err:
+        raise ConfigEntryAuthFailed(str(err)) from err
 
     auth_data = api.export_auth_data()
     if any(data.get(key) != value for key, value in auth_data.items()):
