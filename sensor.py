@@ -5,7 +5,13 @@ from typing import Any, Callable
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfPressure, UnitOfSpeed
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfLength,
+    UnitOfPressure,
+    UnitOfSpeed,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -39,8 +45,15 @@ UNIT_MAP: dict[str, str] = {
     "kilometers": UnitOfLength.KILOMETERS,
     "kilometres": UnitOfLength.KILOMETERS,
     "mph": UnitOfSpeed.MILES_PER_HOUR,
+    "mile/h": UnitOfSpeed.MILES_PER_HOUR,
+    "miles/h": UnitOfSpeed.MILES_PER_HOUR,
     "kph": UnitOfSpeed.KILOMETERS_PER_HOUR,
     "km/h": UnitOfSpeed.KILOMETERS_PER_HOUR,
+    "kilometer/h": UnitOfSpeed.KILOMETERS_PER_HOUR,
+    "c": UnitOfTemperature.CELSIUS,
+    "celsius": UnitOfTemperature.CELSIUS,
+    "f": UnitOfTemperature.FAHRENHEIT,
+    "fahrenheit": UnitOfTemperature.FAHRENHEIT,
     "%": PERCENTAGE,
 }
 
@@ -136,6 +149,15 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         unit_path="tireStatus.rearRight.pressureData.unit",
         value_fn=_tire("rearRight"),
+    ),
+    HondaLinkSensorDescription(
+        key="cabin_temperature",
+        translation_key="cabin_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_path="temperature.cabin.unit",
+        value_fn=lambda body: to_float(get_path(body, "temperature.cabin.value")),
     ),
     HondaLinkSensorDescription(
         key="vehicle_speed",

@@ -20,7 +20,7 @@ This integration uses the HondaLink Android app API flow, observed while debuggi
 
 ## Features
 
-- Fuel level, range, odometer, oil life, 12V battery status, tire pressure, vehicle speed, and last update sensors
+- Fuel level, range, odometer, oil life, 12V battery status, tire pressure, cabin temperature, vehicle speed, and last update sensors
 - Door, hood, trunk, window, lights, warning lamp, and remote engine binary sensors
 - Lock and unlock entity for supported vehicles
 - Buttons for engine start, engine stop, horn, lights, stop horn/lights, and refresh
@@ -39,7 +39,7 @@ Known platform coverage, by the `TelematicsPlatform` field the vehicle API retur
 | Platform | Example | Status |
 |---|---|---|
 | MY21 | 10th gen Accord | Confirmed working, including live data |
-| MY23 | 2024 Accord Hybrid | Endpoints confirmed: authentication, vehicle discovery, and the dashboard schema all respond, with every sensor path this integration maps present. Live values not yet verified end to end. |
+| MY23 | 2024 Accord Hybrid | Confirmed working with live data. Odometer, fuel level, range, oil life, cabin temperature, GPS, speed, doors, locks and lights all report. Tire pressures are not reported by this vehicle. |
 | BEV3 | Prologue | Not supported. These vehicles use HondaLink Connected by OnStar, a different backend entirely. |
 
 Run `tools/hondalink_probe.py` to find out which platform your vehicle reports.
@@ -190,6 +190,21 @@ If this integration is useful to you, consider supporting
 
 ## Version History
 
+### 0.1.6 - 2026-09-07
+
+- Recognise `mile/h` as a speed unit. Honda reports vehicle speed this way, which
+  was not in the unit table and fell back to the default.
+- The remote engine binary sensor now understands the states vehicles actually
+  report. It compared against `ON`, but a MY23 vehicle reports `IG RUN`, so a
+  running engine read as not running. Unrecognised states now report unknown
+  rather than being asserted as off.
+- Corrected the connectivity probe's refresh verdict. It treated an unchanged
+  populated-value count as a failure and advised enrolling the vehicle, when an
+  unchanged count on a vehicle that already reports simply means the data was
+  current.
+- Added a cabin temperature sensor, which vehicles report alongside its unit.
+- Confirmed all sensor mappings against live data from a 2024 Accord Hybrid.
+
 ### 0.1.5 - 2026-09-07
 
 - Added a reauthentication flow. Credential failures previously surfaced as
@@ -232,8 +247,13 @@ If this integration is useful to you, consider supporting
 
 ## Known Limitations
 
-- See the Status section for per-platform coverage. MY23 vehicles reach the API
-  and match the expected schema, but end-to-end live data is unverified.
+- See the Status section for per-platform coverage.
+- Some vehicles never report tire pressure. A 2024 Accord Hybrid returns the tire
+  nodes with a unit but no value, so those sensors stay unknown.
+- Hybrid vehicles that are not plug-in return an `evStatus` block, but every field
+  in it stays unknown. It is a shared template, not a sign of missing support.
+- The `Enrollment` field in the vehicle record can read `N` on a vehicle that
+  nonetheless reports fine. It is not a reliable indicator of connected services.
 - EV fields are exposed only when the Honda dashboard payload returns actual values.
 - Lock and unlock command behavior may vary by vehicle, subscription, market, or Honda API changes.
 - HondaLink is a private cloud API; reliability depends on Honda's service and endpoint compatibility.

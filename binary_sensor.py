@@ -35,12 +35,23 @@ def _warning_lamp_on(body: dict[str, Any]) -> bool | None:
     return any(str(message.get("condition", "")).upper() == "ON" for message in messages)
 
 
+# Observed on a MY23 vehicle: resStatus reads "IG RUN", not "ON". Anything
+# unrecognised stays unknown rather than being asserted as off.
+_ENGINE_OFF_STATES = {"OFF", "IG OFF", "IGOFF", "STOP", "STOPPED", "NO", "NONE"}
+_ENGINE_ON_STATES = {"ON", "IG RUN", "IGRUN", "RUN", "RUNNING", "START", "STARTED"}
+
+
 def _remote_engine_running(body: dict[str, Any]) -> bool | None:
-    """None while the vehicle has not reported a remote start state."""
+    """None while the vehicle has not reported a usable remote start state."""
     status = get_path(body, "remoteEngineStart.vehicleStartEvent.resStatus")
     if status in (None, "", "unknown"):
         return None
-    return str(status).upper() == "ON"
+    state = str(status).strip().upper()
+    if state in _ENGINE_OFF_STATES:
+        return False
+    if state in _ENGINE_ON_STATES or "RUN" in state:
+        return True
+    return None
 
 
 DOOR_KEYS = ["firstRowDriver", "firstRowPassenger", "secondRowDriver", "secondRowPassenger"]

@@ -349,6 +349,7 @@ def step_refresh(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> Non
     print(f"Populated values before refresh: {before}")
 
     request_id = None
+    reported_ok = False
     for filters in FILTER_SETS:
         body: dict[str, Any] = {"device": vin}
         if filters:
@@ -396,6 +397,7 @@ def step_refresh(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> Non
         print(f"  ... {state or '(no status)'}")
         if state in ("success", "completed", "complete", "ok"):
             print("\nVehicle reported successfully.")
+            reported_ok = True
             break
         if state in ("failure", "failed", "error"):
             print("\n" + json.dumps(redact(result), indent=2)[:900])
@@ -408,21 +410,30 @@ def step_refresh(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> Non
     after, total = count_populated(after_body)
     print(f"\nPopulated values after refresh: {after}/{total} (was {before})")
 
-    if after > before:
-        print("\n--- VALUES THAT NOW HAVE DATA ---")
+    if after > before or (after > 0 and reported_ok):
+        if after > before:
+            print("\n--- VALUES THAT NOW HAVE DATA ---")
+        else:
+            print("\n--- CURRENT VALUES ---")
         for line in leaf_paths(after_body):
             if "= 'unknown'" not in line and "= None" not in line:
                 print(f"  {line}")
-        verdict(
-            "CONFIRMED WORKING. The car reports live data through this API.\n"
-            "    dbd/latest was simply an empty cache. The integration should work\n"
-            "    on your Accord once the HA-compatibility fixes are in."
-        )
+        if after == before:
+            verdict(
+                "CONFIRMED WORKING. The vehicle accepted the refresh and reported\n"
+                "    successfully. The count is unchanged because the data was already\n"
+                "    current, not because anything failed."
+            )
+        else:
+            verdict(
+                "CONFIRMED WORKING. The car reports live data through this API.\n"
+                "    dbd/latest was simply a stale cache."
+            )
     else:
         verdict(
-            "Refresh was accepted but no data came back. Strongly suggests the\n"
-            "    vehicle is not enrolled / not subscribed (Enrollment=N), rather\n"
-            "    than an API incompatibility. Enroll in the HondaLink app first."
+            "Refresh was accepted but the vehicle reported nothing at all. With a\n"
+            "    zero baseline this suggests the vehicle is not enrolled or not\n"
+            "    subscribed, rather than an API incompatibility."
         )
 
 

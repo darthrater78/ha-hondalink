@@ -64,6 +64,7 @@
       "front_right_tire_pressure": {"name": "Front right tire pressure"},
       "rear_left_tire_pressure": {"name": "Rear left tire pressure"},
       "rear_right_tire_pressure": {"name": "Rear right tire pressure"},
+      "cabin_temperature": {"name": "Cabin temperature"},
       "vehicle_speed": {"name": "Vehicle speed"},
       "remote_engine_status": {"name": "Remote engine status"},
       "last_update": {"name": "Last update"}
