@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 
 from .api import HondaLinkAPI, HondaLinkAuthError
 from .const import (
@@ -29,11 +29,12 @@ from .const import (
     CONF_VIN,
     DATA_API,
     DATA_COORDINATOR,
+    DATA_RECALL_COORDINATOR,
     DEFAULT_LOCK_COMMAND,
     DEFAULT_UNLOCK_COMMAND,
     DOMAIN,
 )
-from .coordinator import HondaLinkDataUpdateCoordinator
+from .coordinator import HondaLinkDataUpdateCoordinator, HondaLinkRecallCoordinator
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -89,9 +90,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = HondaLinkDataUpdateCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
 
+    # Recalls come from NHTSA, not HondaLink, so a slow or unreachable NHTSA
+    # API only leaves the recall entity unavailable rather than blocking setup.
+    recall_coordinator = HondaLinkRecallCoordinator(hass, entry, async_get_clientsession(hass), data[CONF_VIN])
+    await recall_coordinator.async_refresh()
+
     hass.data[DOMAIN][entry.entry_id] = {
         DATA_API: api,
         DATA_COORDINATOR: coordinator,
+        DATA_RECALL_COORDINATOR: recall_coordinator,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
