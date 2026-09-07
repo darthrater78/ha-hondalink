@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
 
 from .const import CONF_VEHICLE_INFO, CONF_VIN, DOMAIN
-from .coordinator import HondaLinkDataUpdateCoordinator
 
 
-class HondaLinkEntity(CoordinatorEntity[HondaLinkDataUpdateCoordinator]):
+class HondaLinkEntity(CoordinatorEntity[DataUpdateCoordinator]):
+    """Base entity for anything identified by VIN and shown on the vehicle device.
+
+    Not typed to a specific coordinator: it backs entities driven by the
+    HondaLink telematics coordinator as well as the independent NHTSA recall
+    coordinator, and only needs coordinator.data plumbing from the base class.
+    """
+
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: HondaLinkDataUpdateCoordinator, entry, key: str) -> None:
+    def __init__(self, coordinator: DataUpdateCoordinator, entry, key: str) -> None:
         super().__init__(coordinator)
         self.entry = entry
         self.vin = entry.data[CONF_VIN]

@@ -57,5 +57,11 @@ HONDA_HEADER_VERSION = "1.0"
 
 UPDATE_INTERVAL = timedelta(minutes=DEFAULT_SCAN_INTERVAL)
 
+# Recalls are published on the order of days, not minutes, and NHTSA is a
+# separate free public service, so this polls far less often than the
+# vehicle telematics coordinator.
+RECALL_UPDATE_INTERVAL = timedelta(hours=12)
+
 DATA_API = "api"
 DATA_COORDINATOR = "coordinator"
+DATA_RECALL_COORDINATOR = "recall_coordinator"

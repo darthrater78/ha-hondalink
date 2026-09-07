@@ -76,7 +76,8 @@
       "any_window_open": {"name": "Any window open"},
       "any_light_on": {"name": "Any light on"},
       "warning_lamp_on": {"name": "Warning lamp on"},
-      "remote_engine_running": {"name": "Remote engine running"}
+      "remote_engine_running": {"name": "Remote engine running"},
+      "active_recall": {"name": "Active recall"}
     },
     "button": {
       "start_engine": {"name": "Start engine"},

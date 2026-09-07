@@ -4,6 +4,8 @@ from datetime import timedelta
 import logging
 from typing import Any
 
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
@@ -16,7 +18,8 @@ from .api import (
     HondaLinkCommandResult,
     HondaLinkError,
 )
-from .const import CONF_SCAN_INTERVAL, CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import CONF_SCAN_INTERVAL, CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN, RECALL_UPDATE_INTERVAL
+from .nhtsa import NHTSAError, async_decode_vin, async_get_recalls
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,3 +109,31 @@ class HondaLinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # The user already got acceptance; a later failure is only logged.
             _LOGGER.warning("HondaLink %s did not complete: %s", label, err)
         await self.async_refresh()
+
+
+class HondaLinkRecallCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
+    """Polls NHTSA's public recalls API for this vehicle's make/model/year.
+
+    Independent of the HondaLink API and its login: a HondaLink outage or
+    auth failure should not take recall data down with it.
+    """
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, session: aiohttp.ClientSession, vin: str) -> None:
+        self.session = session
+        self.vin = vin
+        self._vehicle: dict[str, str] | None = None
+        super().__init__(
+            hass,
+            logging.getLogger(__name__),
+            config_entry=entry,
+            name=f"{DOMAIN}-{vin}-recalls",
+            update_interval=RECALL_UPDATE_INTERVAL,
+        )
+
+    async def _async_update_data(self) -> list[dict[str, Any]]:
+        try:
+            if self._vehicle is None:
+                self._vehicle = await async_decode_vin(self.session, self.vin)
+            return await async_get_recalls(self.session, **self._vehicle)
+        except NHTSAError as err:
+            raise UpdateFailed(str(err)) from err

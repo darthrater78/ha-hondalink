@@ -25,6 +25,7 @@ This integration uses the HondaLink Android app API flow, observed while debuggi
 - Lock and unlock entity for supported vehicles
 - Buttons for engine start, engine stop, horn, lights, stop horn/lights, and refresh
 - Device tracker from vehicle GPS data when returned by the HondaLink API
+- Active recall binary sensor, sourced from NHTSA's public recalls database and carrying full recall details (campaign number, component, summary, consequence, remedy, report date) as attributes
 - Configurable lock and unlock command codes for vehicles or markets that use alternate CIG command names
 - Units follow what the vehicle reports, so distance, pressure, and speed are not assumed
 
@@ -112,6 +113,26 @@ client_reg_key=<client_reg_key>
 ```
 
 Earlier app-debugging notes may mention `email` and `device_description`, but those fields are not the confirmed working request shape for the live endpoint.
+
+## Recall Alerts
+
+The `binary_sensor.*_active_recall` entity turns on when NHTSA lists an open
+recall for the vehicle. This is sourced entirely from NHTSA's free, public
+[recalls API](https://api.nhtsa.gov/recalls/recallsByVehicle) -- it does not
+use the HondaLink API or require a HondaLink login, so it keeps working even
+if HondaLink authentication is down.
+
+The integration decodes the VIN once through NHTSA's VIN decode API to get
+the make, model, and model year, then polls the recalls API for that
+vehicle every 12 hours. Each recall's campaign number, component, summary,
+consequence, remedy, and report date are available as attributes on the
+entity.
+
+NHTSA's recalls API is keyed by make/model/year rather than VIN, so a listed
+recall can apply to a range of build dates or equipment configurations, not
+necessarily this exact vehicle. Check the campaign number against your VIN
+at [nhtsa.gov/recalls](https://www.nhtsa.gov/recalls) or in the HondaLink app
+before acting on it.
 
 ## Options
 
@@ -206,6 +227,15 @@ If this integration is useful to you, consider supporting
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Version History
+
+### 0.1.8 - 2026-09-07
+
+- Added an active recall binary sensor, sourced from NHTSA's public recalls
+  database by VIN (decoded to make/model/year, since NHTSA's recalls API is
+  not VIN-keyed). Polls independently of the HondaLink API every 12 hours, so
+  it keeps reporting even during a HondaLink outage or auth failure. Recall
+  campaign number, component, summary, consequence, remedy, and report date
+  are exposed as entity attributes.
 
 ### 0.1.7 - 2026-09-07
 
