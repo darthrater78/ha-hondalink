@@ -18,6 +18,42 @@ class HondaLinkBinarySensorDescription(BinarySensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], bool | None]
 
 
+def _warning_lamp_on(body: dict[str, Any]) -> bool | None:
+    """None when the vehicle reports no lamp data at all.
+
+    Returning False there would show a green all-clear built on nothing.
+    """
+    messages = [
+        message
+        for group in get_path(body, "warningLamps.data", []) or []
+        if isinstance(group, dict)
+        for message in group.get("messages", []) or []
+        if isinstance(message, dict)
+    ]
+    if not messages:
+        return None
+    return any(str(message.get("condition", "")).upper() == "ON" for message in messages)
+
+
+# Observed on a MY23 vehicle: resStatus reads "IG RUN", not "ON". Anything
+# unrecognised stays unknown rather than being asserted as off.
+_ENGINE_OFF_STATES = {"OFF", "IG OFF", "IGOFF", "STOP", "STOPPED", "NO", "NONE"}
+_ENGINE_ON_STATES = {"ON", "IG RUN", "IGRUN", "RUN", "RUNNING", "START", "STARTED"}
+
+
+def _remote_engine_running(body: dict[str, Any]) -> bool | None:
+    """None while the vehicle has not reported a usable remote start state."""
+    status = get_path(body, "remoteEngineStart.vehicleStartEvent.resStatus")
+    if status in (None, "", "unknown"):
+        return None
+    state = str(status).strip().upper()
+    if state in _ENGINE_OFF_STATES:
+        return False
+    if state in _ENGINE_ON_STATES or "RUN" in state:
+        return True
+    return None
+
+
 DOOR_KEYS = ["firstRowDriver", "firstRowPassenger", "secondRowDriver", "secondRowPassenger"]
 WINDOW_KEYS = ["frontWindowDR", "frontWindowAS", "rearWindowRR", "rearWindowRL"]
 
@@ -57,18 +93,12 @@ BINARY_SENSORS: tuple[HondaLinkBinarySensorDescription, ...] = (
         key="warning_lamp_on",
         translation_key="warning_lamp_on",
         device_class=BinarySensorDeviceClass.PROBLEM,
-        value_fn=lambda body: any(
-            str(message.get("condition", "")).upper() == "ON"
-            for group in get_path(body, "warningLamps.data", []) or []
-            if isinstance(group, dict)
-            for message in group.get("messages", [])
-            if isinstance(message, dict)
-        ),
+        value_fn=_warning_lamp_on,
     ),
     HondaLinkBinarySensorDescription(
         key="remote_engine_running",
         translation_key="remote_engine_running",
-        value_fn=lambda body: str(get_path(body, "remoteEngineStart.vehicleStartEvent.resStatus", "")).upper() == "ON",
+        value_fn=_remote_engine_running,
     ),
 )
 

@@ -300,6 +300,11 @@ def dms_to_decimal(value: Any) -> float | None:
         return None
 
 
+def _is_reported(value: Any) -> bool:
+    """Honda fills unreported fields with the literal string 'unknown'."""
+    return value not in (None, "") and str(value).strip().lower() != "unknown"
+
+
 def all_door_locks_locked(body: dict[str, Any]) -> bool | None:
     doors = get_path(body, "doorStatus", {})
     if not isinstance(doors, dict):
@@ -307,7 +312,7 @@ def all_door_locks_locked(body: dict[str, Any]) -> bool | None:
     states: list[str] = []
     for key in ("firstRowDriver", "firstRowPassenger", "secondRowDriver", "secondRowPassenger"):
         state = get_path(doors, f"{key}.lockState")
-        if state:
+        if _is_reported(state):
             states.append(str(state))
     if not states:
         return None
@@ -318,7 +323,7 @@ def any_open_state(body: dict[str, Any], base: str, keys: list[str], state_key: 
     found = False
     for key in keys:
         value = get_path(body, f"{base}.{key}.{state_key}")
-        if value is not None:
+        if _is_reported(value):
             found = True
             if str(value).lower() != "closed":
                 return True
@@ -331,7 +336,7 @@ def any_light_on(body: dict[str, Any]) -> bool | None:
         return None
     found = False
     for item in lights.values():
-        if isinstance(item, dict) and "lightState" in item:
+        if isinstance(item, dict) and _is_reported(item.get("lightState")):
             found = True
             if str(item.get("lightState")).upper() != "OFF":
                 return True

@@ -5,11 +5,22 @@ from typing import Any, Callable
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfPressure, UnitOfSpeed
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfLength,
+    UnitOfPressure,
+    UnitOfSpeed,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DATA_COORDINATOR, DOMAIN
+from .const import (
+    CONF_DIAGNOSTIC_ATTRIBUTES,
+    DATA_COORDINATOR,
+    DEFAULT_DIAGNOSTIC_ATTRIBUTES,
+    DOMAIN,
+)
 from .entity import HondaLinkEntity
 from .util import (
     find_12v_battery_candidates,
@@ -23,10 +34,36 @@ from .util import (
 )
 
 
+UNIT_MAP: dict[str, str] = {
+    "kpa": UnitOfPressure.KPA,
+    "psi": UnitOfPressure.PSI,
+    "bar": UnitOfPressure.BAR,
+    "miles": UnitOfLength.MILES,
+    "mile": UnitOfLength.MILES,
+    "mi": UnitOfLength.MILES,
+    "km": UnitOfLength.KILOMETERS,
+    "kilometers": UnitOfLength.KILOMETERS,
+    "kilometres": UnitOfLength.KILOMETERS,
+    "mph": UnitOfSpeed.MILES_PER_HOUR,
+    "mile/h": UnitOfSpeed.MILES_PER_HOUR,
+    "miles/h": UnitOfSpeed.MILES_PER_HOUR,
+    "kph": UnitOfSpeed.KILOMETERS_PER_HOUR,
+    "km/h": UnitOfSpeed.KILOMETERS_PER_HOUR,
+    "kilometer/h": UnitOfSpeed.KILOMETERS_PER_HOUR,
+    "c": UnitOfTemperature.CELSIUS,
+    "celsius": UnitOfTemperature.CELSIUS,
+    "f": UnitOfTemperature.FAHRENHEIT,
+    "fahrenheit": UnitOfTemperature.FAHRENHEIT,
+    "%": PERCENTAGE,
+}
+
+
 @dataclass(frozen=True, kw_only=True)
 class HondaLinkSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
     attr_fn: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    # Payload path holding the unit Honda reports for this value, if any.
+    unit_path: str | None = None
 
 
 def _tire(path: str):
@@ -38,7 +75,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         key="fuel_level",
         translation_key="fuel_level",
         native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.BATTERY,
+        icon="mdi:gas-station",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda body: to_int(get_path(body, "fuelLevel.currentLevel.value")),
     ),
@@ -48,6 +85,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfLength.MILES,
         device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.MEASUREMENT,
+        unit_path="fuelLevel.driveRange.unit",
         value_fn=lambda body: to_int(get_path(body, "fuelLevel.driveRange.value")),
     ),
     HondaLinkSensorDescription(
@@ -56,6 +94,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfLength.MILES,
         device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.TOTAL_INCREASING,
+        unit_path="odometer.unit",
         value_fn=lambda body: to_int(get_path(body, "odometer.value")),
     ),
     HondaLinkSensorDescription(
@@ -81,6 +120,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPressure.KPA,
         device_class=SensorDeviceClass.PRESSURE,
         state_class=SensorStateClass.MEASUREMENT,
+        unit_path="tireStatus.frontLeft.pressureData.unit",
         value_fn=_tire("frontLeft"),
     ),
     HondaLinkSensorDescription(
@@ -89,6 +129,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPressure.KPA,
         device_class=SensorDeviceClass.PRESSURE,
         state_class=SensorStateClass.MEASUREMENT,
+        unit_path="tireStatus.frontRight.pressureData.unit",
         value_fn=_tire("frontRight"),
     ),
     HondaLinkSensorDescription(
@@ -97,6 +138,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPressure.KPA,
         device_class=SensorDeviceClass.PRESSURE,
         state_class=SensorStateClass.MEASUREMENT,
+        unit_path="tireStatus.rearLeft.pressureData.unit",
         value_fn=_tire("rearLeft"),
     ),
     HondaLinkSensorDescription(
@@ -105,7 +147,17 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfPressure.KPA,
         device_class=SensorDeviceClass.PRESSURE,
         state_class=SensorStateClass.MEASUREMENT,
+        unit_path="tireStatus.rearRight.pressureData.unit",
         value_fn=_tire("rearRight"),
+    ),
+    HondaLinkSensorDescription(
+        key="cabin_temperature",
+        translation_key="cabin_temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit_path="temperature.cabin.unit",
+        value_fn=lambda body: to_float(get_path(body, "temperature.cabin.value")),
     ),
     HondaLinkSensorDescription(
         key="vehicle_speed",
@@ -113,6 +165,7 @@ SENSORS: tuple[HondaLinkSensorDescription, ...] = (
         native_unit_of_measurement=UnitOfSpeed.MILES_PER_HOUR,
         device_class=SensorDeviceClass.SPEED,
         state_class=SensorStateClass.MEASUREMENT,
+        unit_path="gpsData.velocity.unit",
         value_fn=lambda body: to_float(get_path(body, "gpsData.velocity.value")),
     ),
     HondaLinkSensorDescription(
@@ -146,7 +199,23 @@ class HondaLinkSensor(HondaLinkEntity, SensorEntity):
         return self.entity_description.value_fn(status_body(self.coordinator.data or {}))
 
     @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Prefer the unit Honda reports, falling back to the declared default."""
+        unit_path = self.entity_description.unit_path
+        if unit_path:
+            reported = get_path(status_body(self.coordinator.data or {}), unit_path)
+            mapped = UNIT_MAP.get(str(reported).strip().lower())
+            if mapped:
+                return mapped
+        return self.entity_description.native_unit_of_measurement
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.entity_description.attr_fn is None:
+            return None
+        # Off by default: these attributes run to hundreds of values and are
+        # written to the recorder database on every poll. Enable in the
+        # integration options only while mapping a new vehicle.
+        if not self.entry.options.get(CONF_DIAGNOSTIC_ATTRIBUTES, DEFAULT_DIAGNOSTIC_ATTRIBUTES):
             return None
         return self.entity_description.attr_fn(status_body(self.coordinator.data or {}))

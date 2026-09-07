@@ -38,6 +38,10 @@ from .const import (
     LEGACY_UNLOCK_COMMAND,
 )
 
+# aiohttp defaults to a 5 minute total timeout, long enough for one stalled
+# request to hold up a coordinator poll indefinitely from the user's point of view.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
 _DYNAMIC_BACKEND_ERROR_CODE = "0x01130009"
 _INVALID_SCOPE_ERROR_CODE = "0001-01-1150"
 
@@ -58,6 +62,8 @@ class HondaLinkCommandError(HondaLinkError):
 class HondaLinkCommandResult:
     request_id: str | None
     response: dict[str, Any]
+    # CIG service the request was sent to, needed to poll for its result.
+    engine: str | None = None
 
 
 def utc_timestamp() -> str:
@@ -135,6 +141,7 @@ class HondaLinkAPI:
         self.session_id = session_id or str(uuid.uuid4())
         self.lock_command = lock_command or DEFAULT_LOCK_COMMAND
         self.unlock_command = unlock_command or DEFAULT_UNLOCK_COMMAND
+        self._login_lock = asyncio.Lock()
 
     async def async_register_client(self) -> str:
         data = await self._request_identity(
@@ -180,10 +187,18 @@ class HondaLinkAPI:
         self.language = user.get("language_code") or self.language or DEFAULT_LANGUAGE
         self.hidas_ident = user.get("hidas_ident") or self.hidas_ident
 
+    def _token_is_valid(self) -> bool:
+        return bool(self.access_token) and self.expires_at > time.time() and bool(self.hidas_ident)
+
     async def async_ensure_login(self) -> None:
-        if self.access_token and self.expires_at > time.time() and self.hidas_ident:
+        if self._token_is_valid():
             return
-        await self.async_login()
+        # Serialised so a coordinator poll and a command arriving together on an
+        # expired token produce one login rather than two.
+        async with self._login_lock:
+            if self._token_is_valid():
+                return
+            await self.async_login()
 
     def export_auth_data(self) -> dict[str, Any]:
         return {
@@ -261,11 +276,7 @@ class HondaLinkAPI:
             message = response_body.get("errorMessage") or str(data)
             raise HondaLinkCommandError(message)
 
-        if not request_id:
-            return HondaLinkCommandResult(None, data)
-
-        result = await self._poll_cig_result("dbd", request_id, timeout=60, poll_interval=3)
-        return HondaLinkCommandResult(request_id, result)
+        return HondaLinkCommandResult(request_id, data, "dbd")
 
     async def async_start_engine(self, *, extend: bool = False) -> HondaLinkCommandResult:
         return await self._async_cig_command(
@@ -338,9 +349,6 @@ class HondaLinkAPI:
         engine: str,
         command: str,
         body: dict[str, Any],
-        *,
-        timeout: int = 75,
-        poll_interval: int = 3,
     ) -> HondaLinkCommandResult:
         try:
             data = await self._request_api(
@@ -358,11 +366,19 @@ class HondaLinkAPI:
             message = response_body.get("errorMessage") or str(data)
             raise HondaLinkCommandError(message)
 
-        if not request_id:
-            return HondaLinkCommandResult(None, data)
+        return HondaLinkCommandResult(request_id, data, engine)
 
-        result = await self._poll_cig_result(engine, request_id, timeout, poll_interval)
-        return HondaLinkCommandResult(request_id, result)
+    async def async_await_command(
+        self,
+        result: HondaLinkCommandResult,
+        *,
+        timeout: int = 75,
+        poll_interval: int = 3,
+    ) -> dict[str, Any]:
+        """Block until the vehicle finishes carrying out an acknowledged command."""
+        if not result.request_id or not result.engine:
+            return result.response
+        return await self._poll_cig_result(result.engine, result.request_id, timeout, poll_interval)
 
     async def _poll_cig_result(
         self,
@@ -439,24 +455,39 @@ class HondaLinkAPI:
         data: dict[str, Any] | None = None,
         json_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        async with self.session.request(
-            method,
-            url,
-            headers=headers,
-            data=data,
-            json=json_body,
-        ) as response:
-            text = await response.text()
-            try:
-                payload = json.loads(text) if text else {}
-            except json.JSONDecodeError as err:
-                raise HondaLinkError(f"Invalid JSON from HondaLink: {response.status} {text}") from err
+        try:
+            async with self.session.request(
+                method,
+                url,
+                headers=headers,
+                data=data,
+                json=json_body,
+                timeout=REQUEST_TIMEOUT,
+            ) as response:
+                return await self._handle_response(response)
+        except asyncio.TimeoutError as err:
+            raise HondaLinkError(f"HondaLink request timed out: {method} {url}") from err
+        except aiohttp.ClientError as err:
+            raise HondaLinkError(f"HondaLink request failed: {err}") from err
 
-            if response.status in (401, 403):
-                raise HondaLinkAuthError(f"HondaLink authorization failed: {_redact_payload(payload)}")
-            if response.status >= 400:
-                raise HondaLinkError(f"HondaLink request failed: HTTP {response.status} {_redact_payload(payload)}")
-            return payload
+    async def _handle_response(self, response: aiohttp.ClientResponse) -> dict[str, Any]:
+        text = await response.text()
+        try:
+            payload = json.loads(text) if text else {}
+        except json.JSONDecodeError as err:
+            # Not parseable, so _redact_payload cannot inspect it. An error page
+            # may embed a token, so only a short excerpt is surfaced.
+            excerpt = text[:200].replace("\n", " ")
+            suffix = "..." if len(text) > 200 else ""
+            raise HondaLinkError(
+                f"Invalid JSON from HondaLink (HTTP {response.status}): {excerpt}{suffix}"
+            ) from err
+
+        if response.status in (401, 403):
+            raise HondaLinkAuthError(f"HondaLink authorization failed: {_redact_payload(payload)}")
+        if response.status >= 400:
+            raise HondaLinkError(f"HondaLink request failed: HTTP {response.status} {_redact_payload(payload)}")
+        return payload
 
     def _api_headers(self) -> dict[str, str]:
         headers = {
