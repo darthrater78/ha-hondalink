@@ -1,8 +1,7 @@
-# HondaLink - Mushroom dashboard view
+# HondaLink - Dashboard view
 #
-# Requires the "Mushroom" custom card (install via HACS > Frontend > Mushroom).
-# Uses only Mushroom cards plus Home Assistant's built-in grid and map cards,
-# so no other custom cards are needed.
+# Uses only built-in Home Assistant cards (tile, heading, markdown, map).
+# No custom cards required.
 #
 # Setup:
 #   1. Find your vehicle's entity ID prefix: Settings > Devices & services >
@@ -25,147 +24,233 @@ title: Honda
 views:
   - title: Honda
     path: honda
+    type: sections
     icon: mdi:car-side
-    type: masonry
-    cards:
-      - type: custom:mushroom-template-card
-        primary: My Honda
-        secondary: >-
-          {% set ts = states('sensor.VEHICLE_last_update') %}
-          {% if ts not in ('unknown', 'unavailable', none) %}
-            Updated {{ relative_time(as_datetime(ts)) }} ago
-          {% else %}
-            Never updated
-          {% endif %}
-        icon: mdi:car-side
-        icon_color: blue
-        tap_action:
-          action: more-info
-        entity: sensor.VEHICLE_last_update
-
-      - type: custom:mushroom-chips-card
-        alignment: center
-        chips:
-          - type: entity
-            entity: sensor.VEHICLE_fuel_level
-            icon: mdi:gas-station
-          - type: entity
-            entity: sensor.VEHICLE_range
-            icon: mdi:map-marker-distance
-          - type: entity
-            entity: sensor.VEHICLE_odometer
-            icon: mdi:counter
-          - type: entity
-            entity: sensor.VEHICLE_oil_life
-            icon: mdi:oil
-          - type: entity
-            entity: sensor.VEHICLE_12v_battery_status
-            icon: mdi:car-battery
-          - type: entity
-            entity: sensor.VEHICLE_cabin_temperature
-            icon: mdi:thermometer
-
-      - type: custom:mushroom-lock-card
-        entity: lock.VEHICLE_doors
-        name: Doors
-        icon_animation: true
-        layout: horizontal
-
-      - type: custom:mushroom-title-card
-        title: Vehicle status
-        alignment: start
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: My Honda
+            heading_style: title
+            icon: mdi:car-side
+          - type: markdown
+            text_only: true
+            entity_id:
+              - sensor.VEHICLE_last_update
+            content: >-
+              {% set ts = states('sensor.VEHICLE_last_update') %}{% if ts
+              not in ('unknown','unavailable',none) %}Updated {{
+              relative_time(as_datetime(ts)) }} ago{% else %}Never updated{% endif
+              %}
+          - type: tile
+            entity: lock.VEHICLE_doors
+            name: Doors
+            features:
+              - type: lock-commands
+            grid_options:
+              columns: 12
+              rows: 1
 
       - type: grid
-        columns: 2
-        square: false
         cards:
-          - type: custom:mushroom-entity-card
+          - type: heading
+            heading: Recall alerts
+            heading_style: subtitle
+            icon: mdi:alert-circle
+          - type: tile
+            entity: binary_sensor.VEHICLE_active_recall
+            name: Active recalls
+            icon: mdi:car-wrench
+            grid_options:
+              columns: 6
+          - type: tile
+            entity: button.VEHICLE_check_recalls
+            name: Check now
+            icon: mdi:refresh
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_check_recalls
+            grid_options:
+              columns: 6
+          - type: markdown
+            content: >-
+              {% set recalls =
+              state_attr('binary_sensor.VEHICLE_active_recall', 'recalls') or []
+              %}{% if recalls | length == 0 %}No recalls found for this
+              vehicle.{% else %}{% for r in recalls %}**{{ r.campaign_number
+              }}** — {{ r.component }}
+
+              {{ r.summary }}
+
+              **Remedy:** {{ r.remedy }}
+
+              {% if not loop.last %}---{% endif %}
+
+              {% endfor %}{% endif %}
+            grid_options:
+              columns: full
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Vehicle status
+            heading_style: subtitle
+          - type: tile
             entity: binary_sensor.VEHICLE_any_door_open
             name: Doors
-          - type: custom:mushroom-entity-card
+            grid_options:
+              columns: 4
+          - type: tile
             entity: binary_sensor.VEHICLE_any_window_open
             name: Windows
-          - type: custom:mushroom-entity-card
+            grid_options:
+              columns: 4
+          - type: tile
             entity: binary_sensor.VEHICLE_hood_open
             name: Hood
-          - type: custom:mushroom-entity-card
+            grid_options:
+              columns: 4
+          - type: tile
             entity: binary_sensor.VEHICLE_trunk_open
             name: Trunk
-          - type: custom:mushroom-entity-card
+            grid_options:
+              columns: 4
+          - type: tile
             entity: binary_sensor.VEHICLE_any_light_on
             name: Lights
-          - type: custom:mushroom-entity-card
-            entity: binary_sensor.VEHICLE_warning_lamp_on
-            name: Warning lamp
-          - type: custom:mushroom-entity-card
+            grid_options:
+              columns: 4
+          - type: tile
             entity: binary_sensor.VEHICLE_remote_engine_running
             name: Engine running
-          - type: custom:mushroom-entity-card
+            grid_options:
+              columns: 4
+          - type: tile
             entity: sensor.VEHICLE_vehicle_speed
             name: Speed
-
-      - type: custom:mushroom-title-card
-        title: Tire pressure
-        alignment: start
+            grid_options:
+              columns: 4
 
       - type: grid
-        columns: 2
-        square: false
         cards:
-          - type: custom:mushroom-entity-card
-            entity: sensor.VEHICLE_front_left_tire_pressure
-            name: Front left
-            icon: mdi:tire
-          - type: custom:mushroom-entity-card
-            entity: sensor.VEHICLE_front_right_tire_pressure
-            name: Front right
-            icon: mdi:tire
-          - type: custom:mushroom-entity-card
-            entity: sensor.VEHICLE_rear_left_tire_pressure
-            name: Rear left
-            icon: mdi:tire
-          - type: custom:mushroom-entity-card
-            entity: sensor.VEHICLE_rear_right_tire_pressure
-            name: Rear right
-            icon: mdi:tire
-
-      - type: custom:mushroom-title-card
-        title: Remote actions
-        alignment: start
+          - type: heading
+            heading: Vehicle info
+            heading_style: subtitle
+          - type: tile
+            entity: sensor.VEHICLE_fuel_level
+            name: Fuel level
+            icon: mdi:gas-station
+            grid_options:
+              columns: 4
+          - type: tile
+            entity: sensor.VEHICLE_range
+            name: Range
+            icon: mdi:map-marker-distance
+            grid_options:
+              columns: 4
+          - type: tile
+            entity: sensor.VEHICLE_odometer
+            name: Odometer
+            icon: mdi:counter
+            grid_options:
+              columns: 4
+          - type: tile
+            entity: sensor.VEHICLE_oil_life
+            name: Oil life
+            icon: mdi:oil
+            grid_options:
+              columns: 4
+          - type: tile
+            entity: sensor.VEHICLE_cabin_temperature
+            name: Cabin temp
+            icon: mdi:thermometer
+            grid_options:
+              columns: 4
 
       - type: grid
-        columns: 3
-        square: false
         cards:
-          - type: custom:mushroom-entity-card
+          - type: heading
+            heading: Remote actions
+            heading_style: subtitle
+          - type: tile
             entity: button.VEHICLE_start_engine
             name: Start
             icon: mdi:engine
-            icon_color: green
-          - type: custom:mushroom-entity-card
+            color: green
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_start_engine
+            grid_options:
+              columns: 4
+          - type: tile
             entity: button.VEHICLE_stop_engine
             name: Stop
             icon: mdi:engine-off
-            icon_color: red
-          - type: custom:mushroom-entity-card
+            color: red
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_stop_engine
+            grid_options:
+              columns: 4
+          - type: tile
             entity: button.VEHICLE_horn
             name: Horn
             icon: mdi:bullhorn
-          - type: custom:mushroom-entity-card
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_horn
+            grid_options:
+              columns: 4
+          - type: tile
             entity: button.VEHICLE_lights
             name: Lights
             icon: mdi:car-light-high
-          - type: custom:mushroom-entity-card
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_lights
+            grid_options:
+              columns: 4
+          - type: tile
             entity: button.VEHICLE_stop_horn_lights
             name: Stop alert
             icon: mdi:car-light-alert
-          - type: custom:mushroom-entity-card
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_stop_horn_lights
+            grid_options:
+              columns: 4
+          - type: tile
             entity: button.VEHICLE_refresh
             name: Refresh
             icon: mdi:refresh
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.VEHICLE_refresh
+            grid_options:
+              columns: 4
 
-      - type: map
-        entities:
-          - entity: device_tracker.VEHICLE_location
-        default_zoom: 14
-        hours_to_show: 0
+      - type: grid
+        cards:
+          - type: map
+            entities:
+              - entity: device_tracker.VEHICLE_location
+            default_zoom: 14
+            hours_to_show: 0
+            grid_options:
+              columns: full
+              rows: 6
