@@ -84,6 +84,22 @@ def _is_invalid_scope_error(err: Exception) -> bool:
     return _INVALID_SCOPE_ERROR_CODE in text or "requested scope is invalid" in text.lower()
 
 
+def _error_detail(payload: Any) -> str:
+    """Pull the human-readable reason out of a HondaLink error payload.
+
+    Honda returns the useful text under responseBody.errorMessage. Without this
+    the whole payload ends up in the message a user sees in Home Assistant.
+    """
+    if isinstance(payload, dict):
+        body = payload.get("responseBody")
+        if isinstance(body, dict):
+            message = body.get("errorMessage")
+            if message:
+                code = body.get("errorCode")
+                return f"{message} ({code})" if code else str(message)
+    return str(_redact_payload(payload))
+
+
 def _redact_payload(value: Any) -> Any:
     if isinstance(value, dict):
         redacted: dict[str, Any] = {}
@@ -486,7 +502,9 @@ class HondaLinkAPI:
         if response.status in (401, 403):
             raise HondaLinkAuthError(f"HondaLink authorization failed: {_redact_payload(payload)}")
         if response.status >= 400:
-            raise HondaLinkError(f"HondaLink request failed: HTTP {response.status} {_redact_payload(payload)}")
+            raise HondaLinkError(
+                f"HondaLink request failed (HTTP {response.status}): {_error_detail(payload)}"
+            )
         return payload
 
     def _api_headers(self) -> dict[str, str]:

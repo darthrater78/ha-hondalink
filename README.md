@@ -175,6 +175,24 @@ This normally means the password was changed in the HondaLink app or on the Hond
 website. If the same credentials do work in the app, check that the account does
 not need updated terms accepted or verification completed there first.
 
+### Remote commands fail with "Pin does not exist"
+
+The vehicle rejected the remote PIN rather than the integration failing to send
+one. An empty PIN is caught locally and reports `Remote PIN is required`, so this
+error means a PIN was sent and Honda did not accept it.
+
+Check, in order:
+
+1. A remote PIN exists on the account. It is separate from the account password
+   and is created in the HondaLink app. Remote commands do not work until one is set.
+2. Remote services are subscribed for the vehicle. Reading vehicle status and
+   sending remote commands are different entitlements, so status sensors can work
+   while commands are refused.
+3. The PIN stored in the integration matches. Update it in the integration options.
+
+If the same command also fails in the HondaLink app, the cause is on the account
+rather than in this integration.
+
 ### Diagnosing connection problems
 
 `tools/hondalink_probe.py` runs the same four-step flow the integration uses and
@@ -207,6 +225,16 @@ If this integration is useful to you, consider supporting
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Version History
+
+### 0.1.9 - 2026-09-07
+
+- Error messages from HondaLink now show the reason the service gave rather than
+  a stringified payload. A rejected remote PIN reported the whole response body
+  instead of `Pin does not exist`.
+- Documented remote command failures caused by a missing remote PIN or an
+  unsubscribed vehicle.
+- Whole-number readings no longer display trailing decimals. The odometer read
+  as `42,726.00 mi`.
 
 ### 0.1.8 - 2026-09-07
 
