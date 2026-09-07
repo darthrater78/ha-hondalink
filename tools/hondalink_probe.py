@@ -20,6 +20,7 @@ import getpass
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,6 +40,15 @@ HONDALINK_SYSTEM_ID = "com.honda.hondalink.cv_android"
 HONDA_HEADER_VERSION = "1.0"
 
 TIMEOUT = 30
+INVALID_SCOPE_CODE = "0001-01-1150"
+
+# Mirrors DASHBOARD_FILTER_SETS in const.py: progressively broader scopes,
+# because narrower filter sets are rejected on some vehicles.
+FILTER_SETS = (
+    ["DigitalTwin", "VEHICLE RANGE", "odometer", "TIRE PRESSURE"],
+    ["DigitalTwin"],
+    [],
+)
 SENSITIVE_KEYS = {"access_token", "refresh_token", "password", "pin", "client_reg_key"}
 
 
@@ -108,6 +118,23 @@ def leaf_paths(value: Any, path: str = "", out: list[str] | None = None) -> list
     elif path:
         out.append(f"{path} = {value!r}"[:160])
     return out
+
+
+def count_populated(body: Any) -> tuple[int, int]:
+    """Return (populated, total) scalar leaves, treating 'unknown' as empty."""
+    populated = total = 0
+    if isinstance(body, dict):
+        for item in body.values():
+            sub_p, sub_t = count_populated(item)
+            populated, total = populated + sub_p, total + sub_t
+    elif isinstance(body, list):
+        for item in body:
+            sub_p, sub_t = count_populated(item)
+            populated, total = populated + sub_p, total + sub_t
+    else:
+        total = 1
+        populated = int(str(body).strip().lower() not in ("unknown", "none", ""))
+    return populated, total
 
 
 def api_headers(token: str, reg_key: str, ctx: dict[str, str]) -> dict[str, str]:
@@ -271,7 +298,14 @@ def step_dashboard(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> N
         return
 
     paths = leaf_paths(body)
+    populated, total = count_populated(body)
     print(f"\nOK - dashboard returned {len(paths)} data points.")
+    print(f"     {populated}/{total} carry an actual value "
+          f"({total - populated} are 'unknown').")
+    if populated == 0:
+        print("\n     NOTE: schema present but completely empty. Either the car has\n"
+              "     never been asked to report (run again with --refresh), or it is\n"
+              "     not enrolled in connected services.")
     print("\n--- FULL SCHEMA (this is your entity map) ---")
     for line in paths:
         print(f"  {line}")
@@ -303,9 +337,115 @@ def step_dashboard(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> N
     print("      Scrub it before pasting anywhere public.")
 
 
+def step_refresh(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> None:
+    """Ask the vehicle to report live state, then re-read the dashboard.
+
+    This is what the integration's refresh button does. It wakes the telematics
+    unit to push a fresh snapshot. No PIN, no physical actuation -- nothing on
+    the car moves, locks, or starts.
+    """
+    step(5, "Request a LIVE refresh from the vehicle (wakes the TCU)")
+    before, _ = count_populated(_latest(vin, token, reg_key, ctx))
+    print(f"Populated values before refresh: {before}")
+
+    request_id = None
+    for filters in FILTER_SETS:
+        body: dict[str, Any] = {"device": vin}
+        if filters:
+            body["filters"] = filters
+        label = filters or "(no filters)"
+        print(f"\nTrying filter scope: {label}")
+        status, payload, text = request(
+            "POST",
+            f"{API_BASE}/REST/NGT/CIG/dbd/async",
+            headers=api_headers(token, reg_key, ctx),
+            body=body,
+        )
+        raw = json.dumps(payload) if payload else text
+        if INVALID_SCOPE_CODE in raw or "requested scope is invalid" in raw.lower():
+            print("  rejected: invalid scope, falling back")
+            continue
+        print(f"  HTTP {status}  status={payload.get('status')!r}")
+        print("  " + json.dumps(redact(payload), indent=2)[:900].replace("\n", "\n  "))
+        request_id = (payload.get("responseBody") or {}).get("cigServiceRequestId")
+        break
+
+    if not request_id:
+        verdict(
+            "The vehicle refused to accept a live refresh request.\n"
+            "    Combined with Enrollment=N on the vehicle record, this points at\n"
+            "    connected services not being active for this VIN. Enroll the car in\n"
+            "    the HondaLink app (and confirm the Remote package is subscribed),\n"
+            "    then re-run. The API layer itself is working fine."
+        )
+        return
+
+    print(f"\nAccepted. Request id obtained. Polling up to 90s...")
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        time.sleep(5)
+        _, result, _ = request(
+            "GET",
+            f"{API_BASE}/REST/NGT/CIG/dbd/results/{request_id}",
+            headers=api_headers(token, reg_key, ctx),
+        )
+        rb = result.get("responseBody") or {}
+        state = str(
+            result.get("status") or rb.get("status") or rb.get("commandStatus") or ""
+        ).lower()
+        print(f"  ... {state or '(no status)'}")
+        if state in ("success", "completed", "complete", "ok"):
+            print("\nVehicle reported successfully.")
+            break
+        if state in ("failure", "failed", "error"):
+            print("\n" + json.dumps(redact(result), indent=2)[:900])
+            verdict("The vehicle was reached but reported a failure. See payload above.")
+            return
+    else:
+        print("\nTimed out waiting for the vehicle to report.")
+
+    after_body = _latest(vin, token, reg_key, ctx)
+    after, total = count_populated(after_body)
+    print(f"\nPopulated values after refresh: {after}/{total} (was {before})")
+
+    if after > before:
+        print("\n--- VALUES THAT NOW HAVE DATA ---")
+        for line in leaf_paths(after_body):
+            if "= 'unknown'" not in line and "= None" not in line:
+                print(f"  {line}")
+        verdict(
+            "CONFIRMED WORKING. The car reports live data through this API.\n"
+            "    dbd/latest was simply an empty cache. The integration should work\n"
+            "    on your Accord once the HA-compatibility fixes are in."
+        )
+    else:
+        verdict(
+            "Refresh was accepted but no data came back. Strongly suggests the\n"
+            "    vehicle is not enrolled / not subscribed (Enrollment=N), rather\n"
+            "    than an API incompatibility. Enroll in the HondaLink app first."
+        )
+
+
+def _latest(vin: str, token: str, reg_key: str, ctx: dict[str, str]) -> dict[str, Any]:
+    _, payload, _ = request(
+        "POST",
+        f"{API_BASE}/REST/NGT/CIG/dbd/latest/{vin}",
+        headers=api_headers(token, reg_key, ctx),
+        body={"fromDate": "", "toDate": ""},
+    )
+    body = payload.get("responseBody")
+    return body if isinstance(body, dict) else {}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Probe HondaLink API reachability.")
     parser.add_argument("--vin", help="VIN to query; defaults to the first discovered")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="also ask the vehicle to report live state (wakes the TCU; "
+             "no PIN needed, nothing on the car actuates)",
+    )
     args = parser.parse_args()
 
     print("HondaLink connectivity probe")
@@ -328,6 +468,8 @@ def main() -> int:
             print("\nNo VIN available to query.", file=sys.stderr)
             return 1
         step_dashboard(vin, token, reg_key, ctx)
+        if args.refresh:
+            step_refresh(vin, token, reg_key, ctx)
     except ProbeError as err:
         print(f"\nProbe stopped: {err}", file=sys.stderr)
         return 1
