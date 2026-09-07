@@ -97,6 +97,9 @@ The integration currently follows this sequence:
 5. Send remote CIG commands through `POST /REST/NGT/CIG/{engine}/async/{command}`.
 6. Poll command results from `GET /REST/NGT/CIG/{engine}/results/{request_id}`.
 
+Steps 5 and 6 are separate: a command call returns as soon as the vehicle
+acknowledges the request, and the result is polled in the background.
+
 ### Token Generation
 
 The live HIDAS token endpoint expects these form fields:
@@ -189,6 +192,20 @@ If this integration is useful to you, consider supporting
 <a href="https://www.buymeacoffee.com/daviddelahoz" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Version History
+
+### 0.1.7 - 2026-09-07
+
+- Remote commands no longer hold a service call open while the vehicle carries
+  them out. Pressing lock or engine start could block for over a minute; the
+  command now returns once the vehicle acknowledges it, and completion is awaited
+  in the background before the coordinator refreshes. Rejections such as a bad
+  PIN still surface to the user immediately.
+- Added an explicit 30 second HTTP timeout. Requests previously inherited
+  aiohttp's five minute default, so one stalled request could hold up a poll.
+- Network and timeout errors are now wrapped as HondaLink errors rather than
+  escaping as raw aiohttp exceptions.
+- The update coordinator is now constructed with its config entry, which Home
+  Assistant expects from 2024.12 onward.
 
 ### 0.1.6 - 2026-09-07
 

@@ -9,7 +9,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import HondaLinkAPI, HondaLinkAuthError, HondaLinkCommandError, HondaLinkError
+from .api import (
+    HondaLinkAPI,
+    HondaLinkAuthError,
+    HondaLinkCommandError,
+    HondaLinkCommandResult,
+    HondaLinkError,
+)
 from .const import CONF_SCAN_INTERVAL, CONF_VIN, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,6 +29,7 @@ class HondaLinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass,
             logging.getLogger(__name__),
+            config_entry=entry,
             name=f"{DOMAIN}-{self.vin}",
             update_interval=timedelta(minutes=interval),
         )
@@ -39,12 +46,12 @@ class HondaLinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_force_refresh(self) -> None:
         try:
-            await self.api.async_request_dashboard_update(self.vin)
-        except HondaLinkCommandError as err:
-            _LOGGER.warning("HondaLink live dashboard refresh request failed: %s", err)
+            result = await self.api.async_request_dashboard_update(self.vin)
         except HondaLinkError as err:
             _LOGGER.warning("HondaLink live dashboard refresh request failed: %s", err)
-        await self.async_refresh()
+            await self.async_refresh()
+            return
+        self._schedule_completion(result, "dashboard refresh")
 
     async def async_start_engine(self) -> None:
         await self._run_command(self.api.async_start_engine)
@@ -68,8 +75,34 @@ class HondaLinkDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self._run_command(self.api.async_stop_horn_lights)
 
     async def _run_command(self, command) -> None:
+        """Send a command and return once the vehicle has accepted it.
+
+        Rejections (bad PIN, unsupported command) surface here and reach the user.
+        Carrying the command out can take over a minute, which is too long to hold
+        a service call open, so completion is awaited in the background and the
+        coordinator refreshed once the vehicle reports back.
+        """
         try:
-            await command()
+            result = await command()
         except HondaLinkCommandError as err:
             raise HomeAssistantError(str(err)) from err
-        await self.async_request_refresh()
+        self._schedule_completion(result, "command")
+
+    def _schedule_completion(self, result: HondaLinkCommandResult, label: str) -> None:
+        if not result.request_id:
+            self.hass.async_create_task(self.async_request_refresh())
+            return
+        self.config_entry.async_create_background_task(
+            self.hass,
+            self._await_completion(result, label),
+            name=f"{DOMAIN} {self.vin} {label}",
+            eager_start=True,
+        )
+
+    async def _await_completion(self, result: HondaLinkCommandResult, label: str) -> None:
+        try:
+            await self.api.async_await_command(result)
+        except HondaLinkError as err:
+            # The user already got acceptance; a later failure is only logged.
+            _LOGGER.warning("HondaLink %s did not complete: %s", label, err)
+        await self.async_refresh()
