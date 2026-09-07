@@ -153,16 +153,15 @@ every poll. Turn it back off once mapping is done.
 
 ## Example Dashboard
 
-A ready-to-use [Mushroom](https://github.com/piitaya/lovelace-mushroom) view is
-included at [`dashboards/hondalink-mushroom.yaml`](dashboards/hondalink-mushroom.yaml).
-It shows fuel, range, odometer, oil life, 12V battery status, and cabin
-temperature at a glance; door/window/light/warning status; tire pressures;
-lock/unlock control; the remote action buttons; and a map from the GPS device
-tracker.
+A ready-to-use dashboard view is included at
+[`dashboards/hondalink-mushroom.yaml`](dashboards/hondalink-mushroom.yaml).
+It uses only built-in Home Assistant cards (tile, heading, markdown, map) --
+no custom cards required. It shows fuel, range, odometer, oil life, cabin
+temperature, and vehicle speed; door/window/hood/trunk/light status;
+lock/unlock control; NHTSA recall alerts with full details; the remote action
+buttons; and a map from the GPS device tracker.
 
-It needs the Mushroom custom card (install via HACS > Frontend > Mushroom) and
-otherwise only uses Home Assistant's built-in grid and map cards. See the
-comments at the top of the file for how to point it at your vehicle's
+See the comments at the top of the file for how to point it at your vehicle's
 entities and add it to a dashboard.
 
 ## Troubleshooting
