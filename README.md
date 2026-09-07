@@ -228,7 +228,7 @@ If this integration is useful to you, consider supporting
 
 ## Version History
 
-### 0.1.8 - 2026-09-07
+### 0.1.10 - 2026-09-07
 
 - Added an active recall binary sensor, sourced from NHTSA's public recalls
   database by VIN (decoded to make/model/year, since NHTSA's recalls API is
@@ -236,6 +236,9 @@ If this integration is useful to you, consider supporting
   it keeps reporting even during a HondaLink outage or auth failure. Recall
   campaign number, component, summary, consequence, remedy, and report date
   are exposed as entity attributes.
+- Corrected the manifest version. `v0.1.7`, `v0.1.8`, and `v0.1.9` had already
+  been tagged and released against an earlier commit before this version was
+  prepared, so this release is numbered `0.1.10` to avoid colliding with them.
 
 ### 0.1.7 - 2026-09-07
 
